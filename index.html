@@ -263,9 +263,9 @@ function listView(k=ent){
  <button class="btn btn2" onclick="word('${k}')">📝 Word</button></div>
  ${k==='sites'?`<div class="row" style="margin-bottom:6px"><select onchange="listView.sec=this.value;listView('sites')" style="flex:1;margin:0;font-weight:bold;color:#1d4e7e"><option value="">🗂️ جميع القطاعات (${DB.data.sites.length})</option>${[...['قطاع وسط مياه','قطاع وسط صرف','قطاع شمال','قطاع جنوب'],...allSectors().filter(s=>!['قطاع وسط مياه','قطاع وسط صرف','قطاع شمال','قطاع جنوب'].includes(s))].map(s=>`<option value="${s}" ${sec===s?'selected':''}>${s} (${DB.data.sites.filter(r=>(r.sector||'بدون قطاع')===s).length})</option>`).join('')}</select></div>`:''}
  <p class="muted">${rows.length} سجل</p>
- <div class="tbl-wrap"><table><tr><th>م</th>${ENT[k].f.map(f=>`<th>${lab(k,f[0])}</th>`).join('')}${(DB.extra[k]||[]).map(x=>`<th>${x}</th>`).join('')}${CUR.role!=='viewer'?'<th>إجراءات</th>':''}<th>📎</th></tr>
+ <div class="tbl-wrap"><table><tr><th>م</th>${orderedFields(k).map(f=>`<th>${lab(k,f[0])}</th>`).join('')}${(DB.extra[k]||[]).map(x=>`<th>${x}</th>`).join('')}${CUR.role!=='viewer'?'<th>إجراءات</th>':''}<th>📎</th></tr>
  ${(()=>{
- const rowHTML=(r,i,tint)=>`<tr><td style="${tint?'background:'+tint:''}">${i+1}</td>${ENT[k].f.map((f,fi)=>{const v=f[0]==='_map'?((r.lat&&r.lng)?'x':''):r[f[0]];return `<td style="text-align:${fi===0?'right':'center'};${fi===0?'font-weight:bold;':''}${tint?'background:'+tint+';':''}${v?'':'background:#f5b1b1'}">${cell(k,r,f)}</td>`}).join('')}${(DB.extra[k]||[]).map(x=>{const v=(r._x||{})[x];return `<td style="${v?'':'background:#f5b1b1'}">${v??''}</td>`}).join('')}
+ const rowHTML=(r,i,tint)=>`<tr><td style="${tint?'background:'+tint:''}">${i+1}</td>${orderedFields(k).map((f,fi)=>{const v=f[0]==='_map'?((r.lat&&r.lng)?'x':''):r[f[0]];return `<td style="text-align:${fi===0?'right':'center'};${fi===0?'font-weight:bold;':''}${tint?'background:'+tint+';':''}${v?'':'background:#f5b1b1'}">${cell(k,r,f)}</td>`}).join('')}${(DB.extra[k]||[]).map(x=>{const v=(r._x||{})[x];return `<td style="${v?'':'background:#f5b1b1'}">${v??''}</td>`}).join('')}
  ${CUR.role!=='viewer'?`<td style="white-space:nowrap"><button class="btn btn2" style="padding:3px 8px" onclick="editView('${k}',${r.id})">✏️</button>
  <button class="btn btn3" style="padding:3px 8px" onclick="del('${k}',${r.id})">🗑</button></td>`:''}
  <td><button class="btn btn2" style="padding:3px 8px" onclick="attView('${k}',${r.id})">📎${(DB.att[k+':'+r.id]||[]).length||''}</button></td></tr>`;
@@ -292,7 +292,7 @@ function editView(k,id){
  let ex=DB.extra[k]||[];
  const opts=(kk)=>[...new Set(DB.data[kk].map(x=>x.name||x.company))].map(n=>`<option value="${n}">`).join('');
  let f=`<div class="mhead">${id?'تعديل':'إضافة'} — ${ENT[k].t}</div><div class="mbody">
- ${ENT[k].f.filter(([key])=>!key.startsWith('_')).map(([key,l,ty,req])=>{
+ ${orderedFields(k).filter(([key])=>!key.startsWith('_')).map(([key,l,ty,req])=>{
   let inp;
   if(ty==='a')inp=`<textarea name="${key}">${r[key]??''}</textarea>`;
   else if(ty==='d')inp=`<input type="date" name="${key}" value="${r[key]??''}">`;
@@ -314,7 +314,11 @@ function editView(k,id){
   else if(ty==='s')inp=`<input name="${key}" list="dl_sites" value="${r[key]??''}"><datalist id="dl_sites">${opts('sites')}</datalist>`;
   else if(ty==='c')inp=`<input name="${key}" list="dl_com" value="${r[key]??''}"><datalist id="dl_com">${opts('companies')}</datalist>`;
   else inp=`<input name="${key}" value="${r[key]??''}"${key==='phone'?' type="tel" inputmode="numeric"':''}>`;
-  return `<label>${lab(k,key)}${req?' *':''}</label>${inp}`}).join('')}
+  return `<div style="display:flex;gap:5px;align-items:flex-start;margin-bottom:2px">
+ <span style="display:flex;flex-direction:column;gap:2px;margin-top:1px;flex:none">
+ <button type="button" class="btn btn2" style="padding:1px 7px;font-size:10px;line-height:1.4" title="فوق" onclick="moveFieldDlg('${k}','${key}',-1,${id||0})">▲</button>
+ <button type="button" class="btn btn2" style="padding:1px 7px;font-size:10px;line-height:1.4" title="تحت" onclick="moveFieldDlg('${k}','${key}',1,${id||0})">▼</button></span>
+ <div style="flex:1;min-width:0"><label>${lab(k,key)}${req?' *':''}</label>${inp}</div></div>`}).join('')}
  ${ex.map(x=>`<label>${x} (إضافي)</label><input name="_x_${x}" value="${(r._x||{})[x]??''}">`).join('')}
  ${k==='sites'?`<input type="hidden" name="lat" value="${r.lat??''}"><input type="hidden" name="lng" value="${r.lng??''}">
  <button type="button" class="btn btn2" style="width:100%;margin-bottom:6px" onclick="getLocNow()">📍 تسجيل موقعي الحالي (GPS)</button>
@@ -383,7 +387,7 @@ async function del(k,id){
 
 /* ---------- التصدير ---------- */
 function tableHTML(k,only,selRows,forDoc){
- const F=only||ENT[k].f;
+ const F=only||orderedFields(k);
  const rows=selRows||DB.data[k];
  const FORCEBG='*{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}';
  const pageCSS=forDoc?'<style>'+FORCEBG+'@page Section1{size:595.3pt 841.9pt;margin:42.55pt 42.55pt 42.55pt 42.55pt}div.Section1{page:Section1}table,td,th{border:1.2pt solid #5d7086 !important}</style>':'<style>'+FORCEBG+'@page{size:A4;margin:1.5cm}</style>';
@@ -617,14 +621,16 @@ function word(k){
 function lblList(){
  const k=($('#lk')&&$('#lk').value)||'sites';
  const specials=k==='sites'?[['_map','اللوكيشن'],['_att','المرفقات']]:[['_att','المرفقات']];
- const all=[...ENT[k].f.map(f=>[f[0],f[1]]),...specials];
+ const extras=(DB.extra[k]||[]).map(x=>[x,x]);
+ const all=[...orderedFields(k).map(f=>[f[0],f[1]]),...specials,...extras];
  $('#lblEd').innerHTML=`<table style="width:100%;table-layout:fixed;border-collapse:collapse">
  <colgroup><col style="width:34px"><col><col style="width:88px"></colgroup>
  <tr><th>م</th><th style="text-align:right">العنوان</th><th>إجراءات</th></tr>
- ${all.map(([fk,l],i)=>`<tr>
+ ${all.map(([fk,l],i)=>`<tr draggable="true" style="cursor:grab"
+  ondragstart="rowDragStart('${k}','${fk}')" ondragover="rowDragOver(event,this)" ondragleave="rowDragLeave(this)" ondrop="rowDrop('${k}','${fk}',this)">
   <td>${i+1}</td>
   <td style="text-align:right"><input id="lb_${fk}" value="${(DB.labels[k]&&DB.labels[k][fk])||l}" style="margin:0;width:100%;text-align:right"></td>
-  <td style="white-space:nowrap;text-align:center">${!fk.startsWith('_')?`<button class="btn btn3" style="padding:4px 8px" title="مسح البيانات" onclick="clearFieldData('${k}','${fk}')">🗑</button> `:''}<button class="btn btn2" style="padding:4px 8px" onclick="saveLbl('${k}','${fk}')">💾</button></td>
+  <td style="white-space:nowrap;text-align:center"><button class="btn btn2" style="padding:4px 7px" title="فوق" onclick="moveField('${k}','${fk}',-1)">▲</button><button class="btn btn2" style="padding:4px 7px" title="تحت" onclick="moveField('${k}','${fk}',1)">▼</button> ${!fk.startsWith('_')?`<button class="btn btn3" style="padding:4px 7px" title="مسح البيانات" onclick="clearFieldData('${k}','${fk}')">🗑</button> `:''}<button class="btn btn2" style="padding:4px 7px" onclick="saveLbl('${k}','${fk}')">💾</button></td>
  </tr>`).join('')}
  </table></div>`;
 }
@@ -970,7 +976,7 @@ function wrapText(c,text,maxW){
  return lines.length?lines:[''];
 }
 async function renderPdfPages(k,rows){
- const F=ENT[k].f, W=1122,H=793,M=34,S=2;
+ const F=orderedFields(k), W=1122,H=793,M=34,S=2;
  const img=new Image();img.src=LOGO_SRC;
  try{await img.decode()}catch(e){}
  // عرض الأعمدة
@@ -1166,6 +1172,50 @@ function backupNow(){
  dl('نسخة_احتياطية_'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(DB),'application/json');
 }
 
+
+/* ---------- ترتيب الأعمدة ---------- */
+function orderedFields(k){
+ const F=ENT[k].f;
+ const o=(DB.fieldOrder||{})[k];
+ if(!o)return F;
+ const map={};F.forEach(f=>map[f[0]]=f);
+ const out=o.map(key=>map[key]).filter(Boolean);
+ F.forEach(f=>{if(!o.includes(f[0]))out.push(f)});
+ return out;
+}
+function moveField(k,fk,dir){
+ const cur=orderedFields(k).map(f=>f[0]);
+ const i=cur.indexOf(fk);const j=i+dir;
+ if(i<0||j<0||j>=cur.length)return;
+ [cur[i],cur[j]]=[cur[j],cur[i]];
+ DB.fieldOrder=DB.fieldOrder||{};DB.fieldOrder[k]=cur;
+ save();lblList();
+}
+
+/* ---------- نقل الحقل من داخل النموذج ---------- */
+function moveFieldDlg(k,fk,dir,id){
+ moveField(k,fk,dir);
+ editView(k,id||undefined);
+}
+
+
+/* ---------- سحب وإفلات صفوف العناوين ---------- */
+let dragFk=null;
+function rowDragStart(k,fk){dragFk=fk}
+function rowDragOver(ev,el){ev.preventDefault();el.style.background='#dbe7f3'}
+function rowDragLeave(el){el.style.background=''}
+function rowDrop(k,targetFk,el){
+ el.style.background='';
+ if(!dragFk||dragFk===targetFk){dragFk=null;return}
+ const cur=orderedFields(k).map(f=>f[0]);
+ const from=cur.indexOf(dragFk), to=cur.indexOf(targetFk);
+ if(from<0||to<0){dragFk=null;return}
+ cur.splice(to,0,cur.splice(from,1)[0]);
+ DB.fieldOrder=DB.fieldOrder||{};DB.fieldOrder[k]=cur;
+ dragFk=null;
+ save();lblList();
+}
+
 /* ---------- الإعدادات ---------- */
 function setView(){
  $('#pg').innerHTML=`
@@ -1173,7 +1223,7 @@ function setView(){
  <b style="color:#1d4e7e;white-space:nowrap">🔑 الأمان</b>
  <button class="btn" style="padding:8px 12px;font-size:13px;flex:1" onclick="changePw()">تغيير كلمة المرور</button>
  <span style="display:flex;align-items:center;gap:4px;flex:1.2">
- <input id="pwShow" type="password" value="${localStorage.getItem('gw_mypw')||''}" readonly dir="ltr" style="margin:0;text-align:left;flex:1;font-size:12px" placeholder="••••••">
+ <input id="pwShow" type="password" value="${localStorage.getItem('gw_mypw')||''}" readonly dir="ltr" style="margin:0;text-align:left;flex:1;font-size:12px" placeholder="سجّل خروج ودخول مرة واحدة ليظهر هنا">
  <button class="btn btn2" style="padding:8px 11px;font-size:14px" onclick="const i=$('#pwShow');const s=i.type==='password';i.type=s?'text':'password';this.textContent=s?'🙈':'👁️'">👁️</button>
  </span></div></div>
  ${CUR.role==='admin'?`<div class="card"><h3 style="color:#1d4e7e">👥 المستخدمون والصلاحيات</h3>
