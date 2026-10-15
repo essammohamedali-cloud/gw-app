@@ -1,0 +1,11 @@
+{
+  "name": "حصر كاميرات الأمن",
+  "short_name": "حصر كاميرات",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#1d4e7e",
+  "theme_color": "#1d4e7e",
+  "icons": [
+    { "src": "icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
