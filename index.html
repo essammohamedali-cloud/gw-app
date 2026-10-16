@@ -253,25 +253,92 @@ function cell(k,r,f){
   return `<a href="https://maps.google.com/?q=${r.lat},${r.lng}" target="_blank" style="color:#1d4e7e;text-decoration:none">📍 ${f[0]==='lat'?'افتح الخريطة':''}</a>`;
  return v??'';
 }
+function onSrch(el,k){
+ const pos=el.selectionStart||el.value.length;
+ listView.kw=el.value;
+ listView(k);
+ const ni=document.getElementById('srchInp');
+ if(ni){ni.focus();try{ni.setSelectionRange(pos,pos)}catch(e){}}
+ showSugg(k);
+}
+function showSugg(k){
+ const box=document.getElementById('srchSugg');if(!box)return;
+ const norm=s=>String(s||'').trim().replace(/[أإآ]/g,'ا').toLowerCase();
+ const nv=norm(listView.kw||'');
+ if(nv.length<2){box.style.display='none';return}
+ const title=r=>r.name||r.cam_no||r.fault_type||r.item_name||r.company||'—';
+ const hits=DB.data[k].filter(r=>{const t=norm(title(r));return t&&(t.includes(nv)||nv.includes(t))}).slice(0,8);
+ if(!hits.length){box.style.display='none';return}
+ const a=getSel(k);
+ box.innerHTML=hits.map(r=>{const on=a.includes(r.id);
+  return '<div onclick="suggGo('+r.id+',\''+k+'\')" onmouseover="this.style.background=\'#eef4fb\'" onmouseout="this.style.background=\'\'" style="padding:10px 12px;border-bottom:1px solid #e6edf6;cursor:pointer;font-size:13.5px;display:flex;align-items:center;gap:8px">'
+  +'<span style="flex:0 0 auto;display:inline-block;width:17px;height:17px;border:2.5px solid '+(on?'#1d7e4e':'#1d4e7e')+';border-radius:5px;background:'+(on?'#1d7e4e':'#fff')+';color:#fff;font-size:12px;line-height:14px;text-align:center">'+(on?'✓':'')+'</span>'
+  +'<span style="flex:1"><b style="color:#1d4e7e">'+(r.name||title(r))+'</b>'+(r.sector?' <span class="muted">— '+r.sector+'</span>':'')+'</span>'
+  +(on?'<span style="color:#1d7e4e;font-size:11px;flex:0 0 auto">✓ مختارة للرئيسية</span>':'')+'</div>'}).join('');
+ box.style.display='block';
+}
+function getSel(k){try{return JSON.parse(localStorage.getItem('homeSel_'+k)||'[]')}catch(e){return[]}}
+function saveSel(k,a){localStorage.setItem('homeSel_'+k,JSON.stringify(a))}
+function toggleSel(id,k){
+ let a=getSel(k);const i=a.indexOf(id);
+ if(i>=0)a.splice(i,1);else a.push(id);
+ saveSel(k,a);
+ listView.kw='';listView(k);
+ const ni=document.getElementById('srchInp');
+ if(ni){ni.value='';ni.focus();}
+}
+function toggleSector(s,k){
+ const ids=DB.data[k].filter(r=>(r.sector||'بدون قطاع')===s).map(r=>r.id);
+ let a=getSel(k);
+ if(ids.length&&ids.every(id=>a.includes(id)))a=a.filter(x=>!ids.includes(x));
+ else ids.forEach(id=>{if(!a.includes(id))a.push(id)});
+ saveSel(k,a);listView(k);
+}
+function toggleSelRow(id,k,ev){if(ev){ev.stopPropagation();}let a=getSel(k);const i=a.indexOf(id);if(i>=0)a.splice(i,1);else a.push(id);saveSel(k,a);listView(k)}
+function selAllChk(k,el){
+ const boxes=[...document.querySelectorAll('#pg input.selChk')];
+ let a=getSel(k);
+ if(el.checked){boxes.forEach(b=>{const id=+b.dataset.id;if(!a.includes(id))a.push(id)})}
+ else{const ids=boxes.map(b=>+b.dataset.id);a=a.filter(x=>!ids.includes(x))}
+ saveSel(k,a);listView(k);
+}
+function removeSel(id,k){saveSel(k,getSel(k).filter(x=>x!==id));listView(k)}
+function clearSel(k){saveSel(k,[]);listView(k)}
+function suggGo(id,k){
+ if(CUR.role==='viewer'){alert('صلاحية مشاهدة فقط');return}
+ toggleSel(id,k);
+}
 function listView(k=ent){
  const kw=(listView.kw||'');
  const sec=(k==='sites')?(listView.sec||''):'';
+ const sel=getSel(k);
+ const showSelOnly=(k==='sites'&&sel.length&&listView.showSel==='1');
  let rows=DB.data[k].filter(r=>!kw||JSON.stringify(r).includes(kw));
  if(sec)rows=rows.filter(r=>(r.sector||'بدون قطاع')===sec);
+ if(showSelOnly)rows=rows.filter(r=>sel.includes(r.id));
  $('#pg').innerHTML=`
- <div class="row"><input style="flex:1" placeholder="🔍 بحث…" value="${kw}" oninput="listView.kw=this.value;listView('${k}')">
+ <div class="row"><div style="flex:1;position:relative"><input id="srchInp" style="margin-bottom:0" placeholder="🔍 بحث…" value="${kw}" autocomplete="off" oninput="onSrch(this,'${k}')">
+ <div id="srchSugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:60;background:#fff;border:1.5px solid #1d4e7e;border-radius:0 0 10px 10px;max-height:45vh;overflow-y:auto;box-shadow:0 8px 18px rgba(0,0,0,.22)"></div></div>
  ${CUR.role!=='viewer'?`<button class="btn" onclick="editView('${k}')">➕ إضافة</button>`:''}</div>
+ ${k==='sites'?(()=>{const secs=[...new Set(DB.data.sites.map(r=>r.sector||'بدون قطاع'))];return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span style="font-size:11.5px;color:#555;font-weight:bold">اختيار سريع بالقطاع:</span>${secs.map(s=>{const ids=DB.data.sites.filter(r=>(r.sector||'بدون قطاع')===s).map(r=>r.id);const on=ids.length&&ids.every(id=>sel.includes(id));const some=!on&&ids.some(id=>sel.includes(id));return `<span onclick="toggleSector('${jsQ(s)}','${k}')" style="cursor:pointer;padding:4px 11px;border-radius:13px;font-size:12px;border:1.5px solid ${on||some?'#1d7e4e':'#1d4e7e'};background:${on?'#1d7e4e':some?'#d9efe0':'#e6ecf4'};color:${on?'#fff':some?'#1d7e4e':'#1d4e7e'};font-weight:bold">${on?'✓ ':some?'◐ ':''}${s} (${ids.length})</span>`}).join('')}</div>`})():''}
+${sel.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:#e8f0e9;border:1.5px solid #1d7e4e;border-radius:10px;padding:8px 10px;margin-bottom:8px"><span style="font-size:12px;color:#1d7e4e;font-weight:bold">🖥️ المعروض على الرئيسية (${sel.length}):</span>${sel.map(id=>{const r=DB.data[k].find(x=>x.id===id);return r?`<span class="chip" style="background:#1d7e4e;color:#fff;font-weight:bold">${r.name||'#'+id}<b style="cursor:pointer;margin-right:6px" onclick="removeSel(${id},'${k}')">❌</b></span>`:''}).join('')}<button class="btn btn2" style="padding:4px 10px;font-size:12px;margin-right:auto" onclick="clearSel('${k}')">🧹 مسح الاختيار</button></div>`:''}
+ ${(k==='sites'&&sel.length)?(()=>{const ss=DB.data.sites.filter(r=>sel.includes(r.id));const nm=ss.map(r=>r.name);const num=v=>{const x=parseFloat(v);return isNaN(x)?0:x};
+ const fx=ss.reduce((a,r)=>a+num(r.fixed_cams),0),pz=ss.reduce((a,r)=>a+num(r.ptz_cams),0);
+ const cards=[['🏠',ss.length,'محطة مختارة','#1d4e7e'],['📷',fx,'كاميرا ثابتة','#2e6da4'],['🎥',pz,'كاميرا متحركة','#6f42c1'],['🔢',fx+pz,'إجمالي الكاميرات','#0d7377']];
+ return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${cards.map(c=>`<div style="flex:1;min-width:100px;background:linear-gradient(180deg,#fff,#f2f7fc);border:1.5px solid ${c[3]};border-radius:10px;padding:9px 8px;text-align:center;box-shadow:0 2px 5px rgba(0,0,0,.07)"><div style="font-size:12px;color:${c[3]};font-weight:bold">${c[0]} ${c[1]}</div><div style="font-size:11px;color:#555;margin-top:2px">${c[2]}</div></div>`).join('')}</div>`})():''}
  <div class="row">
+ ${(k==='sites'&&sel.length)?`<button class="btn" style="background:${showSelOnly?'#1d7e4e':'#e6ecf4'};color:${showSelOnly?'#fff':'#1d4e7e'}" onclick="listView.showSel='${showSelOnly?'0':'1'}';listView('${k}')">🖥️ المختار فقط (${sel.length})</button>`:''}
  <button class="btn btn2" onclick="xls('${k}')">📊 Excel</button>
+ ${CUR.role!=='viewer'?`<button class="btn btn2" onclick="xlsTemplate('${k}')">📄 نموذج</button><button class="btn btn2" onclick="importXls('${k}')">📥 استيراد</button>`:''}
  <button class="btn btn2" onclick="printDlg('${k}')">🖨️ طباعة/PDF</button>
  <button class="btn" style="background:#25D366;padding:9px 13px" onclick="sharePdf('${k}')" title="إرسال PDF واتساب">${WA_W}</button>
  <button class="btn btn2" style="padding:9px 13px" onclick="savePdf('${k}')" title="حفظ PDF">💾</button>
  <button class="btn btn2" onclick="word('${k}')">📝 Word</button></div>
  ${k==='sites'?`<div class="row" style="margin-bottom:6px"><select onchange="listView.sec=this.value;listView('sites')" style="flex:1;margin:0;font-weight:bold;color:#1d4e7e"><option value="">🗂️ جميع القطاعات (${DB.data.sites.length})</option>${[...['قطاع وسط مياه','قطاع وسط صرف','قطاع شمال','قطاع جنوب'],...allSectors().filter(s=>!['قطاع وسط مياه','قطاع وسط صرف','قطاع شمال','قطاع جنوب'].includes(s))].map(s=>`<option value="${s}" ${sec===s?'selected':''}>${s} (${DB.data.sites.filter(r=>(r.sector||'بدون قطاع')===s).length})</option>`).join('')}</select></div>`:''}
  <p class="muted">${rows.length} سجل</p>
- <div class="tbl-wrap"><table><tr><th>م</th>${orderedFields(k).map(f=>`<th>${lab(k,f[0])}</th>`).join('')}${(DB.extra[k]||[]).map(x=>`<th>${x}</th>`).join('')}${CUR.role!=='viewer'?'<th>إجراءات</th>':''}<th>📎</th></tr>
+ <div class="tbl-wrap"><table><tr>${k==='sites'?`<th style="width:30px"><input type="checkbox" style="width:16px;height:16px;margin:0;cursor:pointer" title="تحديد الكل الظاهر" ${rows.length&&rows.every(r=>sel.includes(r.id))?'checked':''} onclick="selAllChk('${k}',this)"></th>`:''}<th>م</th>${orderedFields(k).map(f=>`<th>${lab(k,f[0])}</th>`).join('')}${(DB.extra[k]||[]).map(x=>`<th>${x}</th>`).join('')}${CUR.role!=='viewer'?'<th>إجراءات</th>':''}<th>📎</th></tr>
  ${(()=>{
- const rowHTML=(r,i,tint)=>`<tr><td style="${tint?'background:'+tint:''}">${i+1}</td>${orderedFields(k).map((f,fi)=>{const v=f[0]==='_map'?((r.lat&&r.lng)?'x':''):r[f[0]];return `<td style="text-align:${fi===0?'right':'center'};${fi===0?'font-weight:bold;':''}${tint?'background:'+tint+';':''}${v?'':'background:#f5b1b1'}">${cell(k,r,f)}</td>`}).join('')}${(DB.extra[k]||[]).map(x=>{const v=(r._x||{})[x];return `<td style="${v?'':'background:#f5b1b1'}">${v??''}</td>`}).join('')}
+ const rowHTML=(r,i,tint)=>`<tr>${k==='sites'?`<td style="text-align:center;${tint?'background:'+tint:''}"><input type="checkbox" class="selChk" data-id="${r.id}" style="width:16px;height:16px;margin:0;cursor:pointer" ${sel.includes(r.id)?'checked':''} onclick="toggleSelRow(${r.id},'${k}',event)"></td>`:''}<td style="${tint?'background:'+tint:''}">${i+1}</td>${orderedFields(k).map((f,fi)=>{const v=f[0]==='_map'?((r.lat&&r.lng)?'x':''):r[f[0]];return `<td style="text-align:${fi===0?'right':'center'};${fi===0?'font-weight:bold;':''}${tint?'background:'+tint+';':''}${v?'':'background:#f5b1b1'}">${cell(k,r,f)}</td>`}).join('')}${(DB.extra[k]||[]).map(x=>{const v=(r._x||{})[x];return `<td style="${v?'':'background:#f5b1b1'}">${v??''}</td>`}).join('')}
  ${CUR.role!=='viewer'?`<td style="white-space:nowrap"><button class="btn btn2" style="padding:3px 8px" onclick="editView('${k}',${r.id})">✏️</button>
  <button class="btn btn3" style="padding:3px 8px" onclick="del('${k}',${r.id})">🗑</button></td>`:''}
  <td><button class="btn btn2" style="padding:3px 8px" onclick="attView('${k}',${r.id})">📎${(DB.att[k+':'+r.id]||[]).length||''}</button></td></tr>`;
@@ -280,11 +347,11 @@ function listView(k=ent){
  const order=['قطاع وسط مياه','قطاع وسط صرف','قطاع شمال','قطاع جنوب'];
  const g={};rows.forEach(r=>{const s=r.sector||'بدون قطاع';(g[s]=g[s]||[]).push(r)});
  const keys=[...order.filter(s=>g[s]),...Object.keys(g).filter(s=>!order.includes(s))];
- let n=0;
  return keys.map((s,si)=>{
   const col=PALETTE[si%PALETTE.length];
+  let n=0;
   return `<tr><td colspan="99" style="background:${col};color:#1d4e7e;font-weight:bold;text-align:center;padding:10px;font-size:14px;border-top:3.5px solid #7d94ab;border-bottom:3.5px solid #7d94ab">▾ ${s} (${g[s].length} محطة)</td></tr>`
-  +g[s].map(r=>rowHTML(r,++n,col)).join('')}).join('');
+  +g[s].map(r=>rowHTML(r,n++,col)).join('')}).join('');
  })()}</table></div>
  ${k==='sites'?(()=>{const t=f=>rows.reduce((s,r)=>s+(parseFloat(r[f])||0),0);
   return `<div style="background:#163a5c;color:#ffd98a;text-align:center;font-weight:bold;padding:13px;border-radius:10px;margin-top:10px;font-size:14.5px;border:2px solid #1d4e7e">
@@ -319,12 +386,12 @@ function editView(k,id){
   else if(ty==='n')inp=`<input type="number" name="${key}" value="${r[key]??''}">`;
   else if(ty==='s')inp=`<input name="${key}" list="dl_sites" value="${r[key]??''}"><datalist id="dl_sites">${opts('sites')}</datalist>`;
   else if(ty==='c')inp=`<input name="${key}" list="dl_com" value="${r[key]??''}"><datalist id="dl_com">${opts('companies')}</datalist>`;
-  else inp=`<input name="${key}" value="${r[key]??''}"${key==='phone'?' type="tel" inputmode="numeric"':''}>`;
+  else inp=`<input name="${key}" value="${r[key]??''}"${key==='phone'?' type="tel" inputmode="numeric"':''}${k==='sites'&&key==='name'?' oninput="chkDupName(this,'+(id||0)+')"':''}>`;
   return `<div style="display:flex;gap:5px;align-items:flex-start;margin-bottom:2px">
  <span style="display:flex;flex-direction:column;gap:2px;margin-top:1px;flex:none">
  <button type="button" class="btn btn2" style="padding:1px 7px;font-size:10px;line-height:1.4" title="فوق" onclick="moveFieldDlg('${k}','${key}',-1,${id||0})">▲</button>
  <button type="button" class="btn btn2" style="padding:1px 7px;font-size:10px;line-height:1.4" title="تحت" onclick="moveFieldDlg('${k}','${key}',1,${id||0})">▼</button></span>
- <div style="flex:1;min-width:0"><label>${lab(k,key)}${req?' *':''}</label>${inp}</div></div>`}).join('')}
+ <div style="flex:1;min-width:0"><label>${lab(k,key)}${req?' *':''}</label>${inp}${k==='sites'&&key==='name'?'<div id="dupNameMsg" style="display:none;background:#fdecea;border:1.5px solid #e74c3c;color:#c0392b;border-radius:8px;padding:8px 10px;font-size:12.5px;font-weight:bold;margin:-2px 0 8px"></div>':''}</div></div>`}).join('')}
  ${ex.map(x=>`<label>${x} (إضافي)</label><input name="_x_${x}" value="${(r._x||{})[x]??''}">`).join('')}
  ${k==='sites'?`<input type="hidden" name="lat" value="${r.lat??''}"><input type="hidden" name="lng" value="${r.lng??''}">
  <button type="button" class="btn btn2" style="width:100%;margin-bottom:6px" onclick="getLocNow()">📍 تسجيل موقعي الحالي (GPS)</button>
@@ -341,6 +408,30 @@ function editView(k,id){
  openDlg(f);
 }
 function openDlg(html){$('#dlgB').innerHTML='';$('#dlg').innerHTML=html;$('#dlg').showModal()}
+function chkDupName(el,id){
+ const msg=document.getElementById('dupNameMsg');if(!msg)return;
+ const norm=s=>String(s||'').trim().replace(/[أإآ]/g,'ا').toLowerCase();
+ const v=norm(el.value);
+ if(v.length<2){msg.style.display='none';el.style.borderColor='';el.style.borderWidth='';return}
+ const hits=DB.data.sites.filter(x=>{
+  if(x.id===id)return false;
+  const n=norm(x.name);if(!n)return false;
+  return n===v||n.startsWith(v)||n.includes(v);
+ });
+ if(hits.length){
+  el.style.borderColor='#e74c3c';el.style.borderWidth='2px';
+  msg.innerHTML='<div style="margin-bottom:6px">⚠️ يوجد '+(hits.length===1?'محطة مسجلة':'محطات مسجلة')+' بنفس أو مشابه لهذا الاسم:</div>'
+   +hits.slice(0,5).map(x=>'<div onclick="dupGo('+x.id+')" style="cursor:pointer;background:#fff;border:1.5px solid #e74c3c;border-radius:8px;padding:7px 10px;margin-bottom:5px;font-size:12.5px"><b>«'+x.name+'»</b> <span class="muted">— '+(x.sector||'')+'</span> <span style="color:#e74c3c;font-size:11px">اضغط للعرض 👁️</span></div>').join('')
+   +(hits.length>5?'<div class="muted">و '+(hits.length-5)+' أخرى...</div>':'')
+   +'<div style="font-weight:normal;font-size:11.5px;margin-top:4px">لو هي نفس المحطة اضغط عليها وتأكد — لو مختلفة أكمل عادي</div>';
+  msg.style.display='block';
+ }else{msg.style.display='none';el.style.borderColor='';el.style.borderWidth='';}
+}
+function dupGo(sid){
+ if(!confirm('فتح بيانات المحطة المسجلة للتأكد؟\nالبيانات اللي بتكتبها دلوقتي هتضيع لو فتحتها.'))return;
+ document.getElementById('dlg').close();
+ editView('sites',sid);
+}
 function saveRec(k,id){
  // تنبيه تكرار اسم المحطة
  if(k==='sites'){
@@ -392,7 +483,7 @@ async function del(k,id){
 }
 
 /* ---------- التصدير ---------- */
-function tableHTML(k,only,selRows,forDoc){
+function tableHTML(k,only,selRows,forDoc,forXls){
  const F=only||orderedFields(k);
  const rows=selRows||DB.data[k];
  const FORCEBG='*{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}';
@@ -409,18 +500,107 @@ function tableHTML(k,only,selRows,forDoc){
  <hr style="border:1px solid #333;margin:3px 0">
  <h3 style="text-align:center;margin:4px 0;font-size:13px">(حصر اعداد الكاميرات)</h3>
  <table border="1" style="border-collapse:collapse;width:100%;font-size:12px">
- <tr style="background:#c8d8ea;color:#16324f;font-weight:bold"><th style="width:30px;background:#b3c7dd;color:#16324f">م</th>${F.map(f=>`<th>${lab(k,f[0])}</th>`).join('')}</tr>
- ${rows.map((r,i)=>`<tr><td style="background:#dbe7f3;text-align:center;font-weight:bold">${i+1}</td>${F.map((f,fi)=>`<td style="text-align:${fi===1?'right':'center'};${fi===1?'font-weight:bold;':''}">${f[0]==='_map'?(r.lat?r.lat+', '+r.lng:''):r[f[0]]??''}</td>`).join('')}</tr>`).join('')}
- ${k==='sites'?(()=>{const t=f=>rows.reduce((s,r)=>s+(parseFloat(r[f])||0),0);
+ <tr style="background:#c8d8ea;color:#16324f;font-weight:bold">${forXls?'':`<th style="width:30px;background:#b3c7dd;color:#16324f">م</th>`}${F.map(f=>`<th>${lab(k,f[0])}</th>`).join('')}</tr>
+ ${rows.map((r,i)=>`<tr>${forXls?'':`<td style="background:#dbe7f3;text-align:center;font-weight:bold">${i+1}</td>`}${F.map((f,fi)=>`<td style="text-align:${fi===1?'right':'center'};${fi===1?'font-weight:bold;':''}">${f[0]==='_map'?(r.lat?r.lat+', '+r.lng:''):r[f[0]]??''}</td>`).join('')}</tr>`).join('')}
+ ${!forXls&&k==='sites'?(()=>{const t=f=>rows.reduce((s,r)=>s+(parseFloat(r[f])||0),0);
   return `<tr style="background:#1d4e7e;color:#fff;font-weight:bold"><td style="background:#163a5c;font-weight:bold"></td>${F.map(f=>`<td style="text-align:center;font-weight:bold;color:#fff">${f[0]==='name'?'الإجمالي':f[0]==='fixed_cams'?t('fixed_cams'):f[0]==='ptz_cams'?t('ptz_cams'):''}</td>`).join('')}</tr>`})():''}
  </table>
  
- ${sig}</div></html>`;
+ ${forXls?'':sig}</div></html>`;
 }
 function dl(name,content,mime){const b=new Blob(['﻿'+content],{type:mime});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click()}
-function xls(k){dl('حصر كاميرات.xls',tableHTML(k),'application/vnd.ms-excel')}
+function xls(k){
+ loadXlsx().then(ok=>{
+  if(!ok)return alert('تعذر تحميل مكتبة Excel — تحقق من الاتصال بالإنترنت');
+  const F=ENT[k].f.map(x=>x[0]).reverse();
+  const ws=XLSX.utils.aoa_to_sheet([
+   F.map(key=>lab(k,key)),
+   ...DB.data[k].map(r=>F.map(key=>r[key]??''))
+  ]);
+  ws['!cols']=F.map(()=>({wch:24}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,String(ENT[k].t).slice(0,28));
+  XLSX.writeFile(wb,'حصر كاميرات.xlsx');
+ });
+}
 function csv(k){const f=ENT[k].f;const q=v=>`"${(v??'').toString().replace(/"/g,'""')}"`;
  dl(ENT[k].t+'.csv',f.map(x=>q(lab(k,x[0]))).join(',')+'\n'+DB.data[k].map(r=>f.map(x=>q(r[x[0]])).join(',')).join('\n'),'text/csv')}
+/* ---------- الاستيراد من Excel ---------- */
+let xlsxP=null;
+function loadXlsx(){
+ if(window.XLSX)return Promise.resolve(true);
+ if(xlsxP)return xlsxP;
+ const srcs=['https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+  'https://fastly.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+  'https://gcore.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+  'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js',
+  'https://cdn.staticfile.org/xlsx/0.18.5/xlsx.full.min.js',
+  'https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'];
+ xlsxP=new Promise(res=>{let i=0;(function next(){
+  if(window.XLSX)return res(true);
+  if(i>=srcs.length){xlsxP=null;return res(false)}
+  const s=document.createElement('script');s.src=srcs[i++];s.onload=()=>setTimeout(next,150);s.onerror=()=>setTimeout(next,700);document.head.appendChild(s);
+ })();});
+ return xlsxP;
+}
+function importXls(k){
+ if(CUR.role==='viewer'){alert('صلاحية مشاهدة فقط');return}
+ loadXlsx().then(ok=>{
+  if(!ok)return alert('تعذر تحميل مكتبة قراءة Excel — تحقق من الاتصال بالإنترنت وجرّب تاني');
+  const inp=document.createElement('input');inp.type='file';inp.accept='.xls,.xlsx,.csv';
+  inp.onchange=()=>{const f=inp.files[0];if(!f)return;const rd=new FileReader();
+   rd.onload=e=>{try{
+    const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    doImport(k,XLSX.utils.sheet_to_json(ws,{defval:'',raw:false}));
+   }catch(err){alert('❌ ملف غير صالح: '+err.message)}};
+   rd.readAsArrayBuffer(f);};
+  inp.click();
+ });
+}
+function xlsTemplate(k){
+ loadXlsx().then(ok=>{
+  if(!ok)return alert('تعذر تحميل مكتبة Excel — تحقق من الاتصال بالإنترنت');
+  const f=[...ENT[k].f].reverse();
+  const keyF=ENT[k].f.find(x=>x[0]==='name')||ENT[k].f.find(x=>x[2]===1)||ENT[k].f[0];
+  const ex=f.map(([key])=>key===keyF[0]?'مثال: محطة العمرانية':key==='sector'?'وسط مياه':'');
+  const ws=XLSX.utils.aoa_to_sheet([f.map(([key])=>lab(k,key)),ex]);
+  ws['!cols']=f.map(()=>({wch:24}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'الشيت الأول');
+  XLSX.writeFile(wb,'نموذج_'+ENT[k].t+'.xlsx');
+ });
+}
+function doImport(k,rows){
+ if(!rows.length)return alert('الملف فاضي أو مفيهوش صفوف بيانات');
+ const f=ENT[k].f;
+ const norm=s=>String(s??'').trim().replace(/[أإآ]/g,'ا').toLowerCase().replace(/\s+/g,' ');
+ // مطابقة أعمدة الملف بعناوين النظام
+ const cols={};
+ Object.keys(rows[0]).forEach(h=>{
+  const nh=norm(h);if(!nh)return;
+  f.forEach(([key])=>{if(cols[key])return;if(nh===norm(lab(k,key))||nh===norm(key))cols[key]=h});
+ });
+ const mapped=Object.keys(cols);
+ const keyF=f.find(x=>x[0]==='name')||f.find(x=>x[2]===1)||f[0];
+ const key0=keyF[0];
+ if(!mapped.length)return alert('❌ مفيش أعمدة متطابقة\nلازم أسماء الأعمدة في ملف Excel تكون نفس عناوين النظام:\n'+f.map(([key])=>'• '+lab(k,key)).join('\n'));
+
+ if(!confirm('📥 الأعمدة المتطابقة ('+mapped.length+' من '+f.length+'):\n'+mapped.map(key=>'✓ '+lab(k,key)).join('\n')+'\n\n• لو الاسم موجود قبل كده هيتم تحديث بياناته\n• لو جديد هيتم إضافته\n\nمتابعة الاستيراد؟'))return;
+ let added=0,updated=0,skipped=0;
+ rows.forEach(r=>{
+  const rec={};
+  mapped.forEach(key=>{let v=r[cols[key]];if(v==null)return;v=String(v).trim();if(v!=='')rec[key]=v});
+  const nm=(rec[key0]||'').trim();
+  if(!nm){skipped++;return}
+  const nn=norm(nm);
+  const ex=DB.data[k].find(x=>norm(x[key0])===nn);
+  if(ex){Object.keys(rec).forEach(key=>{if(key!==key0)ex[key]=rec[key]});ex._at=new Date().toLocaleString('ar-EG');updated++}
+  else{rec.id=DB.seq++;rec._by=CUR.u;rec._at=new Date().toLocaleString('ar-EG');DB.data[k].push(rec);added++}
+ });
+ save();listView(k);
+ audit('استيراد Excel',ENT[k].t,'جديد: '+added+' / تحديث: '+updated);
+ alert('✅ تم الاستيراد بنجاح!\n\n🆕 سجلات جديدة: '+added+'\n🔄 سجلات محدّثة: '+updated+(skipped?'\n⏭️ متخطّاة (بدون اسم): '+skipped:''));
+}
 function printDlg(k){
  const f=ENT[k].f;
  const kw=(listView.kw||'');
@@ -493,7 +673,7 @@ function doRep(){
  const f2=ENT[k].f;
  $('#rout').innerHTML=`<p class="muted">${rows.length} سجل</p><div class="tbl-wrap"><table><tr>${f2.map(x=>`<th>${lab(k,x[0])}</th>`).join('')}</tr>
  ${rows.map(r=>`<tr>${f2.map(x=>`<td>${r[x[0]]??''}</td>`).join('')}</tr>`).join('')}</table></div>
- <div class="row" style="margin-top:8px"><button class="btn btn2" onclick="dl('تقرير_${ENT[k].t}.xls',tableHTML('${k}'),'application/vnd.ms-excel')">📊 Excel</button>
+ <div class="row" style="margin-top:8px"><button class="btn btn2" onclick="xls('${k}')">📊 Excel</button>
  <button class="btn btn2" onclick="printDlg('${k}')">🖨️ طباعة/PDF</button>
  <button class="btn" style="background:#25D366;padding:9px 13px" onclick="sharePdf('${k}')" title="إرسال PDF واتساب">${WA_W}</button>
  <button class="btn btn2" style="padding:9px 13px" onclick="savePdf('${k}')" title="حفظ PDF">💾</button>
@@ -631,13 +811,13 @@ function lblList(){
  const fields=orderedFields(k).filter(f=>!f[0].startsWith('_')).map(f=>[f[0],f[1]]);
  const all=[...fields,...specials,...extras];
  $('#lblEd').innerHTML=`<table style="width:100%;table-layout:fixed;border-collapse:collapse">
- <colgroup><col style="width:34px"><col><col style="width:88px"></colgroup>
+ <colgroup><col style="width:34px"><col><col style="width:112px"></colgroup>
  <tr><th>م</th><th style="text-align:right">العنوان</th><th>إجراءات</th></tr>
  ${all.map(([fk,l],i)=>`<tr draggable="true" style="cursor:grab"
   ondragstart="rowDragStart('${k}','${fk}')" ondragover="rowDragOver(event,this)" ondragleave="rowDragLeave(this)" ondrop="rowDrop('${k}','${fk}',this)">
   <td>${i+1}</td>
   <td style="text-align:right"><input id="lb_${fk}" value="${(DB.labels[k]&&DB.labels[k][fk])||l}" style="margin:0;width:100%;text-align:right"></td>
-  <td style="white-space:nowrap;text-align:center"><button class="btn btn2" style="padding:4px 7px" title="فوق" onclick="moveField('${k}','${fk}',-1)">▲</button><button class="btn btn2" style="padding:4px 7px" title="تحت" onclick="moveField('${k}','${fk}',1)">▼</button> ${!fk.startsWith('_')?`<button class="btn btn3" style="padding:4px 7px" title="مسح البيانات" onclick="clearFieldData('${k}','${fk}')">🗑</button> `:''}<button class="btn btn2" style="padding:4px 7px" onclick="saveLbl('${k}','${fk}')">💾</button></td>
+  <td style="white-space:nowrap;text-align:center"><button class="btn btn2" style="padding:4px 7px" title="حفظ" onclick="saveLbl('${k}','${fk}')">💾</button> ${!fk.startsWith('_')?`<button class="btn btn3" style="padding:4px 7px" title="مسح البيانات" onclick="clearFieldData('${k}','${fk}')">🗑</button> `:''}<button class="btn btn2" style="padding:4px 7px" title="فوق" onclick="moveField('${k}','${fk}',-1)">▲</button><button class="btn btn2" style="padding:4px 7px" title="تحت" onclick="moveField('${k}','${fk}',1)">▼</button></td>
  </tr>`).join('')}
  </table></div>`;
 }
@@ -793,7 +973,7 @@ function summaryHTML(title,headers,rows,totals,forDoc,totRow){
  ${totRow?`<tr style="background:#1d4e7e;color:#fff;font-weight:bold"><td style="background:#163a5c;font-weight:bold"></td>${totRow.map(c=>`<td style="text-align:center;font-weight:bold;color:#fff">${c}</td>`).join('')}</tr>`:''}
  </table>
  ${totals?`<div style="background:#1d4e7e;color:#fff;text-align:center;font-weight:bold;padding:8pt;margin-top:8pt;font-size:11pt">${totals}</div>`:''}
- ${sig}</div></html>`;
+ ${forXls?'':sig}</div></html>`;
 }
 function printSummary(title,headers,rows,totals,totRow){
  const w=window.open('','_blank');w.document.write(summaryHTML(title,headers,rows,totals,false,totRow));w.document.close();w.print();
