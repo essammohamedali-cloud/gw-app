@@ -311,6 +311,7 @@ function suggGo(id,k){
 function listView(k=ent){
  const kw=(listView.kw||'');
  const sec=(k==='sites')?(listView.sec||''):'';
+ if(k==='sites')DB.data.sites.forEach(r=>{if(r.sector){const c=canonSector('sites',r.sector);if(c!==r.sector){r.sector=c;DB.dirty=true}}});
  const sel=getSel(k);
  const showSelOnly=(k==='sites'&&sel.length&&listView.showSel==='1');
  let rows=DB.data[k].filter(r=>!kw||JSON.stringify(r).includes(kw));
@@ -558,15 +559,93 @@ function importXls(k){
   inp.click();
  });
 }
+function sectorOpts(k){
+ const f=(ENT[k].f||[]).find(x=>String(x[2]||'').startsWith('opts@'));
+ return f?f[2].slice(5).split('|').map(s=>s.trim()).filter(Boolean):[];
+}
+function canonSector(k,v){
+ const opts=sectorOpts(k);
+ if(!opts.length||!v)return v;
+ const nv=String(v).trim().replace(/[أإآ]/g,'ا').toLowerCase().replace(/^قطاع\s*/,'').replace(/\s+/g,' ');
+ if(!nv)return v;
+ const hit=opts.find(o=>{
+  const no=o.replace(/[أإآ]/g,'ا').toLowerCase().replace(/^قطاع\s*/,'').replace(/\s+/g,' ');
+  return no===nv||no.includes(nv)||nv.includes(no);
+ });
+ return hit||v;
+}
+/* ---------- النسخ الاحتياطي ---------- */
+function backupAll(){
+ const o={v:2,date:new Date().toISOString(),seq:DB.seq,data:{},labels:DB.labels,extra:DB.extra,att:DB.att};
+ EKEYS.forEach(k=>o.data[k]=DB.data[k]);
+ dl('نسخة_احتياطية_'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(o),'application/json');
+ alert('💾 تم تنزيل النسخة الاحتياطية\nاحفظ الملف في مكان آمن — لو حصل أي مشكلة تقدر ترجع كل البيانات منه');
+}
+function legacyCopy(t){
+ try{const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';ta.readOnly=true;document.body.appendChild(ta);ta.select();const ok=document.execCommand('copy');document.body.removeChild(ta);return ok}catch(e){return false}
+}
+function copyTxt(t){
+ if(navigator.clipboard&&navigator.clipboard.writeText){return navigator.clipboard.writeText(t).then(()=>true).catch(()=>legacyCopy(t))}
+ return Promise.resolve(legacyCopy(t));
+}
+async function backupWhats(){
+ const o={v:2,date:new Date().toISOString(),seq:DB.seq,data:{},labels:DB.labels,extra:DB.extra,att:DB.att};
+ EKEYS.forEach(k=>o.data[k]=DB.data[k]);
+ const str=JSON.stringify(o);
+ // لو النسخة صغيرة: حط البيانات نفسها في رسالة الواتساب مباشرة
+ const full=encodeURIComponent('📦 نسخة احتياطية — نظام حصر كاميرات الأمن\n\n'+str);
+ if(full.length<6000){window.open('https://wa.me/?text='+full,'_blank');return}
+ // لو كبيرة: انسخها وبعدين افتح الواتساب
+ const ok=await copyTxt(str);
+ window.open('https://wa.me/?text='+encodeURIComponent(ok?'📦 نسخة احتياطية — نظام حصر كاميرات الأمن\n\n✅ النسخة اتنسخت تلقائياً\nاضغط مطولاً في خانة الكتابة ← لصق ← إرسال واحتفظ بالرسالة':'📦 نسخة احتياطية\n\n❌ تعذر النسخ التلقائي\nاستخدم زرار "⬇️ تنزيل نسخة احتياطية" وابعت الملف مرفق في الواتساب'),'_blank');
+}
+function restoreTextDlg(){
+ if(CUR.role!=='admin'){alert('الاستعادة للمدير فقط');return}
+ $('#dlgT').textContent='📋 استعادة من نص واتساب';
+ $('#dlgB').innerHTML=`<p class="muted" style="margin-bottom:8px">افتح رسالة الواتساب اللي فيها النسخة، انسخ النص من أول <b style="direction:ltr;display:inline-block">{</b> لآخر <b style="direction:ltr;display:inline-block">}</b> والصقه في الخانة دي</p>
+ <textarea id="rstTxt" style="min-height:180px;direction:ltr;text-align:left" placeholder='{"v":2,"date":...}'></textarea>
+ <div class="row" style="margin-bottom:0"><button class="btn" onclick="doRestoreText()">⬆️ استعادة النسخة</button></div>`;
+ $('#dlg').showModal();
+}
+function doRestoreText(){
+ const t=(document.getElementById('rstTxt')||{}).value||'';
+ const m=t.match(/\{[\s\S]*\}/);
+ if(!m)return alert('❌ مفيش بيانات صالحة — اتأكد إنك نسخت من أول { لآخر }');
+ let o;try{o=JSON.parse(m[0])}catch(e){return alert('❌ النص مش صالح: '+e.message)}
+ if(!o.data)return alert('❌ النسخة مش مكتملة');
+ if(!confirm('⚠️ الاستعادة هتستبدل كل البيانات الحالية بمحتوى النسخة.\n\nمتأكد؟'))return;
+ EKEYS.forEach(k=>{if(Array.isArray(o.data[k]))DB.data[k]=o.data[k]});
+ if(o.labels)DB.labels=o.labels;if(o.extra)DB.extra=o.extra;if(o.att)DB.att=o.att;if(o.seq)DB.seq=o.seq;
+ save();document.getElementById('dlg').close();audit('استعادة من نص واتساب','النظام','');mainView();
+ alert('✅ تمت الاستعادة بنجاح');
+}
+function restoreAll(){
+ if(CUR.role!=='admin'){alert('الاستعادة للمدير فقط');return}
+ const inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json';
+ inp.onchange=()=>{const f=inp.files[0];if(!f)return;const rd=new FileReader();
+  rd.onload=e=>{try{
+   const o=JSON.parse(e.target.result);
+   if(!o||!o.data)return alert('❌ ملف غير صالح');
+   if(!confirm('⚠️ تنبيه مهم!\nالاستعادة هتستبدل كل البيانات الحالية بمحتوى النسخة الاحتياطية.\n\nمتأكد إنك عايز تكمل؟'))return;
+   EKEYS.forEach(k=>{if(Array.isArray(o.data[k]))DB.data[k]=o.data[k]});
+   if(o.labels)DB.labels=o.labels;if(o.extra)DB.extra=o.extra;if(o.att)DB.att=o.att;if(o.seq)DB.seq=o.seq;
+   save();audit('استعادة نسخة احتياطية','النظام','');mainView();
+   alert('✅ تمت الاستعادة بنجاح');
+  }catch(err){alert('❌ ملف غير صالح: '+err.message)}};
+  rd.readAsText(f);};
+ inp.click();
+}
 function xlsTemplate(k){
  loadXlsx().then(ok=>{
   if(!ok)return alert('تعذر تحميل مكتبة Excel — تحقق من الاتصال بالإنترنت');
   const f=[...ENT[k].f].reverse();
   const keyF=ENT[k].f.find(x=>x[0]==='name')||ENT[k].f.find(x=>x[2]===1)||ENT[k].f[0];
-  const ex=f.map(([key])=>key===keyF[0]?'مثال: محطة العمرانية':key==='sector'?'وسط مياه':'');
+  const opts=sectorOpts(k);
+  const ex=f.map(([key])=>key===keyF[0]?'مثال: محطة العمرانية':key==='sector'?(opts[0]||'وسط مياه'):'');
   const ws=XLSX.utils.aoa_to_sheet([f.map(([key])=>lab(k,key)),ex]);
   ws['!cols']=f.map(()=>({wch:24}));
-  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'الشيت الأول');
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'البيانات');
+  if(opts.length)XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['القطاعات المتاحة — انسخ من هنا بالظبط'],...opts.map(o=>[o])]),'القطاعات');
   XLSX.writeFile(wb,'نموذج_'+ENT[k].t+'.xlsx');
  });
 }
@@ -592,6 +671,7 @@ function doImport(k,rows){
   mapped.forEach(key=>{let v=r[cols[key]];if(v==null)return;v=String(v).trim();if(v!=='')rec[key]=v});
   const nm=(rec[key0]||'').trim();
   if(!nm){skipped++;return}
+  if(rec.sector)rec.sector=canonSector(k,rec.sector);
   const nn=norm(nm);
   const ex=DB.data[k].find(x=>norm(x[key0])===nn);
   if(ex){Object.keys(rec).forEach(key=>{if(key!==key0)ex[key]=rec[key]});ex._at=new Date().toLocaleString('ar-EG');updated++}
@@ -1424,7 +1504,20 @@ function setView(){
    <option value="admin" ${DB.roles[em]==='admin'?'selected':''}>مدير</option></select>
   ${em!==CUR.email?`<button class="btn btn3" style="padding:6px 10px" onclick="delete DB.roles['${em}'];save();setView()">🗑</button>`:'<span class="chip">أنت</span>'}
  </div>`).join('')||'<p class="muted">لا مستخدمين</p>'}</div>`:''}
- ${CUR.role!=='viewer'?`<div class="card"><h3 style="color:#1d4e7e;margin-bottom:8px">🏢 إدارة شركات الصيانة</h3>
+ <div class="card"><h3 style="color:#1d4e7e;margin-bottom:8px">💾 النسخ الاحتياطي</h3>
+<div class="row" style="margin-bottom:0">
+${CUR.role!=='viewer'?`<button class="btn btn2" style="flex:1" onclick="backupAll()">⬇️ تنزيل نسخة احتياطية</button>`:''}
+${CUR.role==='admin'?`<button class="btn btn3" style="flex:1" onclick="restoreAll()">⬆️ استعادة من نسخة</button>
+</div>
+<div class="row" style="margin-bottom:0">
+${CUR.role==='admin'?`<button class="btn btn2" style="flex:1" onclick="restoreTextDlg()">📋 استعادة من نص واتساب</button>`:''}
+</div>
+<div class="row" style="margin-bottom:0">
+<button class="btn" style="flex:1;background:#25D366;color:#fff;font-weight:bold" onclick="backupWhats()"><span style="display:inline-flex;align-items:center;gap:7px">${WA_SVG} إرسال نسخة للواتساب</span></button>`:''}
+</div>
+<p class="muted" style="margin-top:6px">النسخة بتحفظ كل البيانات في ملف — ابعته لنفسك على واتساب أو احفظه في الدارف عشان تضمنه</p>
+</div>
+${CUR.role!=='viewer'?`<div class="card"><h3 style="color:#1d4e7e;margin-bottom:8px">🏢 إدارة شركات الصيانة</h3>
  <div class="row"><input id="newComp" placeholder="اسم الشركة الجديدة..." style="flex:1;margin:0"><button class="btn" style="padding:9px 15px" onclick="addComp2()">➕</button></div>
  <div class="tbl-wrap" style="max-height:250px"><table>
  <tr><th>م</th><th>الشركة</th><th>المحطات</th><th>إجراءات</th></tr>
@@ -1450,11 +1543,6 @@ function setView(){
  <div class="card"><h3 style="color:#1d4e7e;margin-bottom:8px">💾 النسخ الاحتياطي</h3>
  <div class="row"><button class="btn btn2" style="flex:1" onclick="autoBackupInfo()">☁️ النسخة التلقائية السحابية</button></div>
  <p class="muted" style="font-size:11px;margin:6px 0">النسخة التلقائية بتتعمل كل أسبوع تلقائياً أول ما تدخل — وبتحفظ آخر نسخة على السيرفر</p>
- <div class="row"><button class="btn" onclick="backup()">⬇️ تصدير نسخة احتياطية</button>
- <label class="btn btn2" style="text-align:center">⬆️ استعادة نسخة<input type="file" accept=".json" hidden onchange="restore(this)"></label>
- <label class="btn" style="text-align:center;background:#1d7e4e">📥 دمج بيانات واردة<input type="file" accept=".json" hidden onchange="restoreMerge(this)"></label>
- <button class="btn" style="background:#8e44ad;margin-top:6px" onclick="mergeTextDlg()">📋 دمج من نص واتساب (لصق)</button>
- <button class="btn btn2" style="margin-top:6px" onclick="backupNow()">⬇️ تنزيل نسخة الآن (JSON)</button></div>
  <button class="btn btn3" style="width:100%;margin-top:8px" onclick="if(confirm('تسجيل الخروج؟'))AUTH.signOut()">🚪 تسجيل الخروج</button></div>`;
  lblList();showFList();
 }
