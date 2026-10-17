@@ -97,10 +97,11 @@ const $=s=>document.querySelector(s);
 const jsQ=s=>String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 const ENT={
 sites:{t:'🏠 الصفحة الرئيسية',f:[
- ['sector','القطاع','opts@قطاع وسط مياه|قطاع وسط صرف|قطاع شمال|قطاع جنوب'],
+ ['sector','القطاع','opts@قطاع وسط مياه|قطاع وسط صرف|قطاع شمال|قطاع جنوب مياه|قطاع جنوب صرف'],
  ['name','اسم المحطة',1],
  ['fixed_cams','عدد الكاميرات الثابتة','n'],
  ['ptz_cams','عدد الكاميرات المتحركة','n'],
+ ['booth_cams','كاميرات العنابر','n'],
  ['room_items','محتويات غرفة الأمن','check'],
  ['location','العنوان'],
  ['_map','اللوكيشن'],
@@ -108,6 +109,7 @@ sites:{t:'🏠 الصفحة الرئيسية',f:[
  ['phone','التواصل'],
  ['maint_company','شركة الصيانة','opts@شركة زيرو تك|شركة كايزن'],
  ['last_maint','آخر موعد صيانة','d'],
+ ['op_year','تاريخ التشغيل (السنة)','n'],
  ['notes','ملاحظات','a']
 ]},
 cameras:{t:'إعداد الكاميرات',f:[['site','الموقع','s'],['cam_no','رقم الكاميرا',1],['location','موضع التركيب'],['cam_type','النوع'],['direction','الاتجاه'],['status','الحالة'],['install_date','تاريخ التركيب','d'],['notes','ملاحظات','a']]},
@@ -311,7 +313,7 @@ function suggGo(id,k){
 function listView(k=ent){
  const kw=(listView.kw||'');
  const sec=(k==='sites')?(listView.sec||''):'';
- if(k==='sites')DB.data.sites.forEach(r=>{if(r.sector){const c=canonSector('sites',r.sector);if(c!==r.sector){r.sector=c;DB.dirty=true}}});
+ if(k==='sites')DB.data.sites.forEach(r=>{let ch=false;optsFields('sites').forEach(key=>{if(r[key]){const c=canonOpts('sites',key,r[key]);if(c!==r[key]){r[key]=c;ch=true}}});if(ch)DB.dirty=true});
  const sel=getSel(k);
  const showSelOnly=(k==='sites'&&sel.length&&listView.showSel==='1');
  let rows=DB.data[k].filter(r=>!kw||JSON.stringify(r).includes(kw));
@@ -324,8 +326,8 @@ function listView(k=ent){
  ${k==='sites'?(()=>{const secs=[...new Set(DB.data.sites.map(r=>r.sector||'بدون قطاع'))];return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span style="font-size:11.5px;color:#555;font-weight:bold">اختيار سريع بالقطاع:</span>${secs.map(s=>{const ids=DB.data.sites.filter(r=>(r.sector||'بدون قطاع')===s).map(r=>r.id);const on=ids.length&&ids.every(id=>sel.includes(id));const some=!on&&ids.some(id=>sel.includes(id));return `<span onclick="toggleSector('${jsQ(s)}','${k}')" style="cursor:pointer;padding:4px 11px;border-radius:13px;font-size:12px;border:1.5px solid ${on||some?'#1d7e4e':'#1d4e7e'};background:${on?'#1d7e4e':some?'#d9efe0':'#e6ecf4'};color:${on?'#fff':some?'#1d7e4e':'#1d4e7e'};font-weight:bold">${on?'✓ ':some?'◐ ':''}${s} (${ids.length})</span>`}).join('')}</div>`})():''}
 ${sel.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:#e8f0e9;border:1.5px solid #1d7e4e;border-radius:10px;padding:8px 10px;margin-bottom:8px"><span style="font-size:12px;color:#1d7e4e;font-weight:bold">🖥️ المعروض على الرئيسية (${sel.length}):</span>${sel.map(id=>{const r=DB.data[k].find(x=>x.id===id);return r?`<span class="chip" style="background:#1d7e4e;color:#fff;font-weight:bold">${r.name||'#'+id}<b style="cursor:pointer;margin-right:6px" onclick="removeSel(${id},'${k}')">❌</b></span>`:''}).join('')}<button class="btn btn2" style="padding:4px 10px;font-size:12px;margin-right:auto" onclick="clearSel('${k}')">🧹 مسح الاختيار</button></div>`:''}
  ${(k==='sites'&&sel.length)?(()=>{const ss=DB.data.sites.filter(r=>sel.includes(r.id));const nm=ss.map(r=>r.name);const num=v=>{const x=parseFloat(v);return isNaN(x)?0:x};
- const fx=ss.reduce((a,r)=>a+num(r.fixed_cams),0),pz=ss.reduce((a,r)=>a+num(r.ptz_cams),0);
- const cards=[['🏠',ss.length,'محطة مختارة','#1d4e7e'],['📷',fx,'كاميرا ثابتة','#2e6da4'],['🎥',pz,'كاميرا متحركة','#6f42c1'],['🔢',fx+pz,'إجمالي الكاميرات','#0d7377']];
+ const fx=ss.reduce((a,r)=>a+num(r.fixed_cams),0),pz=ss.reduce((a,r)=>a+num(r.ptz_cams),0),bt=ss.reduce((a,r)=>a+num(r.booth_cams),0);
+ const cards=[['🏠',ss.length,'محطة مختارة','#1d4e7e'],['📷',fx,'كاميرا ثابتة','#2e6da4'],['🎥',pz,'كاميرا متحركة','#6f42c1'],['🔢',fx+pz+bt,'إجمالي الكاميرات','#0d7377']];
  return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${cards.map(c=>`<div style="flex:1;min-width:100px;background:linear-gradient(180deg,#fff,#f2f7fc);border:1.5px solid ${c[3]};border-radius:10px;padding:9px 8px;text-align:center;box-shadow:0 2px 5px rgba(0,0,0,.07)"><div style="font-size:12px;color:${c[3]};font-weight:bold">${c[0]} ${c[1]}</div><div style="font-size:11px;color:#555;margin-top:2px">${c[2]}</div></div>`).join('')}</div>`})():''}
  <div class="row">
  ${(k==='sites'&&sel.length)?`<button class="btn" style="background:${showSelOnly?'#1d7e4e':'#e6ecf4'};color:${showSelOnly?'#fff':'#1d4e7e'}" onclick="listView.showSel='${showSelOnly?'0':'1'}';listView('${k}')">🖥️ المختار فقط (${sel.length})</button>`:''}
@@ -356,7 +358,7 @@ ${sel.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center
  })()}</table></div>
  ${k==='sites'?(()=>{const t=f=>rows.reduce((s,r)=>s+(parseFloat(r[f])||0),0);
   return `<div style="background:#163a5c;color:#ffd98a;text-align:center;font-weight:bold;padding:13px;border-radius:10px;margin-top:10px;font-size:14.5px;border:2px solid #1d4e7e">
-  📊 إجمالي الكاميرات الثابتة: ${t('fixed_cams')} &nbsp;•&nbsp; المتحركة: ${t('ptz_cams')} &nbsp;•&nbsp; الإجمالي الكلي: ${t('fixed_cams')+t('ptz_cams')}
+  📊 إجمالي الثابتة: ${t('fixed_cams')} &nbsp;•&nbsp; المتحركة: ${t('ptz_cams')} &nbsp;•&nbsp; العنابر: ${t('booth_cams')} &nbsp;•&nbsp; الكلي: ${t('fixed_cams')+t('ptz_cams')+t('booth_cams')}
   </div>`})():''}`;
 }
 
@@ -563,17 +565,19 @@ function sectorOpts(k){
  const f=(ENT[k].f||[]).find(x=>String(x[2]||'').startsWith('opts@'));
  return f?f[2].slice(5).split('|').map(s=>s.trim()).filter(Boolean):[];
 }
-function canonSector(k,v){
- const opts=sectorOpts(k);
- if(!opts.length||!v)return v;
- const nv=String(v).trim().replace(/[أإآ]/g,'ا').toLowerCase().replace(/^قطاع\s*/,'').replace(/\s+/g,' ');
- if(!nv)return v;
- const hit=opts.find(o=>{
-  const no=o.replace(/[أإآ]/g,'ا').toLowerCase().replace(/^قطاع\s*/,'').replace(/\s+/g,' ');
-  return no===nv||no.includes(nv)||nv.includes(no);
- });
+function optsFields(k){
+ return (ENT[k].f||[]).filter(x=>String(x[2]||'').startsWith('opts@')).map(x=>x[0]);
+}
+function canonOpts(k,key,v){
+ const f=(ENT[k].f||[]).find(x=>x[0]===key&&String(x[2]||'').startsWith('opts@'));
+ if(!f||!v)return v;
+ const opts=f[2].slice(5).split('|').map(s=>s.trim()).filter(Boolean);
+ const norm=s=>String(s).trim().replace(/[أإآ]/g,'ا').toLowerCase().replace(/^قطاع\s*/,'').replace(/^شركة\s*/,'').replace(/\s+/g,' ');
+ const nv=norm(v);if(!nv)return v;
+ const hit=opts.find(o=>{const no=norm(o);return no===nv||no.includes(nv)||nv.includes(no)});
  return hit||v;
 }
+function canonSector(k,v){return canonOpts(k,'sector',v)}
 /* ---------- النسخ الاحتياطي ---------- */
 function backupAll(){
  const o={v:2,date:new Date().toISOString(),seq:DB.seq,data:{},labels:DB.labels,extra:DB.extra,att:DB.att};
@@ -671,7 +675,7 @@ function doImport(k,rows){
   mapped.forEach(key=>{let v=r[cols[key]];if(v==null)return;v=String(v).trim();if(v!=='')rec[key]=v});
   const nm=(rec[key0]||'').trim();
   if(!nm){skipped++;return}
-  if(rec.sector)rec.sector=canonSector(k,rec.sector);
+  mapped.forEach(key=>{if(rec[key])rec[key]=canonOpts(k,key,rec[key])});
   const nn=norm(nm);
   const ex=DB.data[k].find(x=>norm(x[key0])===nn);
   if(ex){Object.keys(rec).forEach(key=>{if(key!==key0)ex[key]=rec[key]});ex._at=new Date().toLocaleString('ar-EG');updated++}
