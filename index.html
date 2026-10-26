@@ -445,6 +445,24 @@ document.addEventListener('resume',()=>{
  resetIdle();
 });
 /* 🔐 لو التطبيق اتقفل خالص (اندفنت) ورجعت بعد 10 دقائق — اقفل على طول */
+/* 📋 التقاط تلقائي من الحافظة عند الرجوع من الخرائط — لو فيها إحداثيات أو Plus Code يتعتمد لوحده */
+document.addEventListener('visibilitychange',()=>{
+ if(document.hidden)return;
+ setTimeout(async()=>{
+  try{
+   const dlg=document.getElementById('dlg');
+   if(!dlg||dlg.style.display==='none')return;
+   const box=document.querySelector('#dlg [name=mapPaste]');if(!box)return;
+   if(!navigator.clipboard||!navigator.clipboard.readText)return;
+   const txt=(await navigator.clipboard.readText()||'').trim();
+   if(!txt||txt===box.value)return;
+   const looksLoc=/\d{1,2}[.]\d{3,}/.test(txt)||/[23456789CFGHJMPQRVWX]{2,8}\s*\+\s*/i.test(txt)||/[?&]q=\d|maps[.]app|google[.]com\/maps/i.test(txt);
+   if(!looksLoc)return;
+   box.value=txt;
+   if(extractLocFromText(txt,fillCoords))toast('📋 تم التقاط الموقع من الحافظة تلقائياً ✅');
+  }catch(e){}
+ },700);
+});
 window.addEventListener('load',()=>setTimeout(()=>{
  try{
   const t=parseInt(localStorage.getItem('gw_lock_at')||'0',10);
@@ -1096,7 +1114,7 @@ function editView(k,id){
     <option value="paste">📋 لصق موقع مرسل (خرائط/واتساب)</option>
     </select>
     <div id="mapModeGps" style="display:none;margin-bottom:8px"><button type="button" class="btn" style="background:#1d7e4e;width:100%;padding:10px" onclick="getGps(this)">📡 اضغط لتسجيل موقعك الحالي</button></div>
-    <div id="mapModePaste" style="display:none;margin-bottom:8px"><textarea name="mapPaste" placeholder="الصق هنا رابط خرائط جوجل أو Plus Code أو إحداثيات..." style="min-height:70px;margin-bottom:4px"></textarea><button type="button" class="btn btn2" style="width:100%" onclick="parsePasteLoc()">🗺️ اعتماد الموقع</button></div>
+    <div id="mapModePaste" style="display:none;margin-bottom:8px"><textarea name="mapPaste" placeholder="الصق هنا رابط خرائط جوجل أو Plus Code أو إحداثيات..." style="min-height:70px;margin-bottom:4px"></textarea><button type="button" class="btn btn2" style="width:100%" onclick="parsePasteLoc()">🗺️ اعتماد الموقع</button><button type="button" class="btn btn2" style="width:100%;margin-top:6px" onclick="pasteFromClipboard()">📥 التقاط من الحافظة</button></div>
     <input type="hidden" name="lat" value="${r.lat||''}"><input type="hidden" name="lng" value="${r.lng||''}">`;
   }
   else if(k==='sites'&&key==='sector')return '';
@@ -1473,7 +1491,7 @@ function quickLocView(id){
  +'<div style="display:flex;gap:6px;margin-bottom:8px"><input name="lat" dir="ltr" style="text-align:left;direction:ltr" placeholder="Latitude" value="'+(r.lat||'')+'"><input name="lng" dir="ltr" style="text-align:left;direction:ltr" placeholder="Longitude" value="'+(r.lng||'')+'"></div>'
  +(ro?'':'<button type="button" class="btn" style="background:#1d7e4e;width:100%;padding:10px;margin-bottom:6px" onclick="getGps(this)">📡 تسجيل موقعك الحالي (GPS)</button>'
  +'<textarea name="mapPaste" placeholder="الصق رابط خرائط جوجل أو Plus Code أو إحداثيات..." style="min-height:60px;margin-bottom:4px"></textarea>'
- +'<button type="button" class="btn btn2" style="width:100%" onclick="parsePasteLoc()">🗺️ استخراج الموقع من النص الملصوق</button>')
+ +'<button type="button" class="btn btn2" style="width:100%" onclick="parsePasteLoc()">🗺️ استخراج الموقع من النص الملصوق</button><button type="button" class="btn btn2" style="width:100%;margin-top:6px" onclick="pasteFromClipboard()">📥 التقاط من الحافظة</button>')
  +((r.lat&&r.lng)?'<a class="btn btn2" style="width:100%;display:block;text-align:center;text-decoration:none;margin-top:8px" target="_blank" href="https://maps.google.com/?q='+r.lat+','+r.lng+'">🧭 عرض الموقع الحالي على الخريطة</a>':'')
  +(ro?'':'<button type="button" class="btn" style="width:100%;padding:12px;font-weight:bold;margin-top:10px" onclick="quickLocSave('+id+')">💾 حفظ الموقع والعنوان</button>')
  +'<button type="button" class="btn btn2" style="width:100%;margin-top:6px" onclick="document.getElementById(\'dlg\').close()">✖ إغلاق</button></div>');
@@ -2779,7 +2797,9 @@ async function resolveShortLink(t,cb){
   ()=>step(o=>fetch('https://api.allorigins.win/get?url='+encodeURIComponent(t),o).then(r=>{if(!r.ok)throw 0;return r.json()}).then(j=>{const c=grab(j&&j.contents);if(c)return c;throw 0})),
   ()=>step(o=>fetch('https://www.expandurl.net/api/v1/?url='+encodeURIComponent(t),o).then(r=>{if(!r.ok)throw 0;return r.json()}).then(j=>{const c=grab(j&&(j.resolved_url||j.end_url||j.url));if(c)return c;throw 0})),
   ()=>step(o=>fetch('https://api.cors.lol/?url='+encodeURIComponent(t),o).then(r=>{if(!r.ok)throw 0;return r.text()}).then(x=>{const c=grab(x);if(c)return c;throw 0})),
-  ()=>step(o=>fetch('https://unshorten.me/api/v1/'+encodeURIComponent(t),o).then(r=>{if(!r.ok)throw 0;return r.json()}).then(j=>{const c=grab(j&&(j.resolved_url||j.long_url||j.url));if(c)return c;throw 0}))
+  ()=>step(o=>fetch('https://unshorten.me/api/v1/'+encodeURIComponent(t),o).then(r=>{if(!r.ok)throw 0;return r.json()}).then(j=>{const c=grab(j&&(j.resolved_url||j.long_url||j.url));if(c)return c;throw 0})),
+  ()=>step(o=>fetch('https://corsproxy.org/?'+encodeURIComponent(t),o).then(r=>{if(!r.ok)throw 0;return r.text()}).then(x=>{const c=grab(x);if(c)return c;throw 0})),
+  ()=>step(o=>fetch('https://jsonlink.com/api/extract?url='+encodeURIComponent(t),o).then(r=>{if(!r.ok)throw 0;return r.json()}).then(j=>{const c=grab(j&&(j.url||j.final_url||j.canonical));if(c)return c;throw 0}))
  ];
  for(const st of steps){
   try{const c=await st();if(c){restore(t);cb(c,'من رابط جوجل');return}}catch(e){}
@@ -2799,6 +2819,22 @@ async function resolveShortLink(t,cb){
  +'<button class="btn" style="background:#1d7e4e;padding:12px" onclick="window.open(\''+safe+'\',\'_blank\')">🧭 فتح الرابط في الخرائط</button>'
  +'<button class="btn btn2" style="padding:12px" onclick="document.getElementById(\'dlg\').close();setTimeout(function(){alert(\'في الخرائط:\n1) اضغط مطولاً على النقطة الحمرا\n2) هتظهر أرقام فوق ← اضغط عليها بتتنسخ\n3) ارجع والصق هنا ← اعتماد الموقع\n\n🧭 أو انسخ Plus Code المكان والصقه — بيشتغل حتى لو النت ضعيف\')},200)">📋 خطوات النسخ اليدوي</button>'
  +'<button class="btn btn2" onclick="document.getElementById(\'dlg\').close()">✖ إلغاء</button></div>');
+}
+/* 📥 تقاط تلقائي من الحافظة — بيقرا أي نص فيه إحداثيات أو Plus Code */
+async function pasteFromClipboard(){
+ try{
+  if(!navigator.clipboard||!navigator.clipboard.readText){alert('المتصفح مش بيدعم قراءة الحافظة — اعمل لصق عادي في الخانة');return}
+  const txt=(await navigator.clipboard.readText()||'').trim();
+  if(!txt){alert('الحافظة فاضية — انسخ الإحداثيات أو Plus Code من الخرائط الأول');return}
+  const box=document.querySelector('#dlg [name=mapPaste]');if(box)box.value=txt;
+  const done=extractLocFromText(txt,fillCoords);
+  if(!done)alert('❌ الحافظة فيها حاجة مش مكان:\n'+txt.slice(0,90)+'\n\nاللي بيفهمه: إحداثيات، Plus Code، أو رابط خرائط');
+ }catch(e){alert('⚠️ اسمح بالوصول للحافظة (شريط الإذن فوق) — أو اعمل لصق عادي في الخانة')}
+}
+function toast(msg){
+ const el=document.createElement('div');
+ el.style.cssText='position:fixed;top:16%;left:12%;right:12%;background:#1d7e4e;color:#fff;padding:16px 14px;border-radius:14px;text-align:center;font-weight:bold;font-size:15px;z-index:99999;box-shadow:0 10px 30px rgba(0,0,0,.35)';
+ el.textContent=msg;document.body.appendChild(el);setTimeout(()=>{try{el.remove()}catch(e){}},2500);
 }
 function parsePasteLoc(){
  const t=(document.querySelector('#dlg [name=mapPaste]')||{}).value||'';
