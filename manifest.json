@@ -1,0 +1,33 @@
+{
+  "name": "حصر كاميرات الأمن — مياه الجيزة",
+  "short_name": "حصر كاميرات",
+  "description": "نظام إدارة أمن المحطات — شركة مياه الشرب والصرف الصحي بالجيزة",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1d4e7e",
+  "theme_color": "#1d4e7e",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
